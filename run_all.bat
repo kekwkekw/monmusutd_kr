@@ -8,7 +8,7 @@ echo =========================================
 
 echo.
 echo [0/4] 깃허브 서버와 동기화 중 (충돌 방지)...
-git pull origin main
+git pull origin main --rebase --autostash
 
 echo.
 echo [1/4] 게임 서버에서 원본 데이터 긁어오는 중...

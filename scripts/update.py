@@ -110,7 +110,7 @@ class Updater:
                 except Exception as e:
                     print(f"    [Warning] {asset_path} 처리 오류: {e}")
         
-        print(f"  > 총 {count}개의 시나리오 파일이 gt_input에 저장되었습니다."))
+        print(f"  > 총 {count}개의 시나리오 파일이 gt_input에 저장되었습니다.")
 
 if __name__ == '__main__':
     # 독립 실행 시 기본 경로 설정

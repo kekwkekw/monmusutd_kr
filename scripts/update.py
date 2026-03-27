@@ -35,51 +35,44 @@ class Updater:
         except Exception as e:
             print(f"  [Critical] 작업 중 오류 발생: {e}")
 
-    def fetch_version_and_list(self):
-        """최신 클라이언트 및 에셋 버전 정보 획득"""
-        try:
-            # 1. DMM API를 통해 앱 버전(cvr) 확인
-            resp = self.client.get(self.APP_INFO_URL)
-            resp.raise_for_status()
-            cvr = resp.json()["free_appinfo"]["app_version_name"]
-            print(f"  > Client Version (cvr): {cvr}")
-
-            # 2. 게임 API를 통해 에셋 번들 버전 확인
-            payload = {"cvr": cvr, "provider": "dmm"}
-            resp = self.client.post(self.VERSION_API, json=payload)
-            resp.raise_for_status()
-            ver = resp.json()["data"]["version"]
-            bundle_ver = f"ver_{ver}"
-            print(f"  > Bundle Version: {bundle_ver}")
-
-            # 3. 전체 에셋 목록(ablist.json) 다운로드
-            ablist_url = f"{self.ASSET_BASE_URL}/{bundle_ver}/webgl_r18/ablist.json"
-            self.ablist = self.client.get(ablist_url).json()
-            print(f"  > Fetched ablist.json (Base Version: {self.ablist['baseVersion']})")
-        
-        except Exception as e:
-            print(f"  [Error] 버전 정보를 가져오는데 실패했습니다: {e}")
-            raise
-
     def update_novels(self):
+        """파일명이 해시이므로 내부 데이터를 확인하여 수집"""
         if not self.ablist: return
 
-        # 1. 시나리오로 의심되는 파일 경로 20개만 출력해보기 
-        print("\n  [탐색] 시나리오 후보 파일 경로 샘플:")
-        sample_count = 0
+        base_ver = self.ablist["baseVersion"]
+        base_url = f"{self.ASSET_BASE_URL}/ver_{base_ver}/webgl_r18"
+        
+        print("  > 해시 파일 분석 및 테이블 데이터 수집 중...")
+        
+        count = 0
         for asset in self.ablist["data"]:
-            path = asset["path"].lower()
-            # 보통 시나리오는 .bytes, .csv, .json 또는 특정 폴더에 들어있습니다. 
-            if any(k in path for k in [".bytes", ".csv", "story", "res"]):
-                print(f"    - {asset['path']}")
-                sample_count += 1
-            if sample_count >= 20: break 
+            asset_path = asset["path"] # 예: 0006a5...bytes
             
-        # 2. 전체 경로에서 특정 단어가 들어간 파일이 몇 개인지 확인 
-        keywords = ["scenario", "adv", "event", "story", "talk", "novel"]
-        for k in keywords:
-            found = sum(1 for a in self.ablist["data"] if k in a["path"].lower())
-            print(f"  > 키워드 '{k}' 검색 결과: {found}개")
+            # 1. 일단 모든 .bytes 파일을 대상으로 시도 (용량이 작은 것부터 확인 권장)
+            file_url = f"{base_url}/{asset['hash']}{asset_path}"
+            
+            try:
+                # 팁: 우선 헤더만 확인하기 위해 5바이트만 먼저 받아볼 수도 있음
+                resp = self.client.get(file_url)
+                resp.raise_for_status()
+                
+                # 유니티 번들 파일이 아니면 (몬무스 암호화 파일일 가능성 높음)
+                if not resp.content.startswith(b"Unity"):
+                    # 2. 몬무스 전용 복호화 시도
+                    decrypted = decrypt_monmusu(resp.content)
+                    
+                    # 3. 복호화된 데이터가 Utage 시나리오(CSV/TSV/JSON)인지 확인
+                    # 몬무스는 테이블 데이터가 많으므로, 특정 단어가 포함된 데이터만 선별
+                    decoded_text = decrypted.decode('utf-8', errors='ignore')
+                    if any(k in decoded_text for k in ["message", "Message", "title", "Title"]):
+                        print(f"    [Found Scenario Table] {asset_path}")
+                        write_json(self.download_dir / f"{asset_path}.json", {"content": decoded_text})
+                        count += 1
+                        
+            except Exception:
+                continue
+        
+        print(f"  > 총 {count}개의 데이터 테이블을 확보했습니다.")
 
 if __name__ == '__main__':
     # 독립 실행 시 기본 경로 설정

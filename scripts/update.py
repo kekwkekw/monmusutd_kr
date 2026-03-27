@@ -62,55 +62,24 @@ class Updater:
             raise
 
     def update_novels(self):
-        """시나리오 에셋 다운로드 및 텍스트 추출"""
-        if not self.ablist:
-            print("  [Error] 에셋 리스트가 없습니다.")
-            return
+        if not self.ablist: return
 
-        base_ver = self.ablist["baseVersion"]
-        base_url = f"{self.ASSET_BASE_URL}/ver_{base_ver}/webgl_r18"
-        
-        novels_dir = self.translation_dir / 'novels'
-        novels_dir.mkdir(parents=True, exist_ok=True)
-        existed_novels = os.listdir(novels_dir)
-
-        print(f"  > 총 {len(self.ablist['data'])}개의 에셋 스캔 중...")
-        
-        count = 0
+        # 1. 시나리오로 의심되는 파일 경로 20개만 출력해보기 
+        print("\n  [탐색] 시나리오 후보 파일 경로 샘플:")
+        sample_count = 0
         for asset in self.ablist["data"]:
-            asset_path = asset["path"]
+            path = asset["path"].lower()
+            # 보통 시나리오는 .bytes, .csv, .json 또는 특정 폴더에 들어있습니다. 
+            if any(k in path for k in [".bytes", ".csv", "story", "res"]):
+                print(f"    - {asset['path']}")
+                sample_count += 1
+            if sample_count >= 20: break 
             
-            # 필터링 조건: 몬무스에 맞게 scenario, adv, event 등을 포함
-            is_scenario = any(k in asset_path.lower() for k in ["scenario", "adv", "event"])
-            
-            if is_scenario:
-                # 파일명에서 ID 추출
-                match = re.search(r'\d+', Path(asset_path).stem)
-                novel_id = match.group() if match else Path(asset_path).stem
-                
-                # 중복 체크
-                if novel_id in existed_novels:
-                    continue
-
-                print(f"    [Found] 다운로드 시작: {asset_path}") # 실제 다운로드 시 출력
-                file_url = f"{base_url}/{asset['hash']}{asset_path}"
-                
-                try:
-                    resp = self.client.get(file_url)
-                    resp.raise_for_status()
-                    
-                    decrypted_data = decrypt_monmusu(resp.content)
-                    result = parse_bundle(decrypted_data)
-                    
-                    if result:
-                        script_name, script_text = result
-                        script_messages = parse_script(script_text)
-                        write_json(self.download_dir / f'{script_name}.json', script_messages)
-                        count += 1
-                except Exception as e:
-                    print(f"    [Warning] {asset_path} 처리 오류: {e}")
-        
-        print(f"  > 총 {count}개의 시나리오 파일이 gt_input에 저장되었습니다.")
+        # 2. 전체 경로에서 특정 단어가 들어간 파일이 몇 개인지 확인 
+        keywords = ["scenario", "adv", "event", "story", "talk", "novel"]
+        for k in keywords:
+            found = sum(1 for a in self.ablist["data"] if k in a["path"].lower())
+            print(f"  > 키워드 '{k}' 검색 결과: {found}개")
 
 if __name__ == '__main__':
     # 독립 실행 시 기본 경로 설정

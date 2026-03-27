@@ -4,8 +4,8 @@ import time
 from openai import OpenAI
 
 # ================= 설정 구간 =================
-INPUT_FOLDER = 'GalTransl/sampleProject/gt_input'
-OUTPUT_FOLDER = 'GalTransl/sampleProject/transl_cache'
+INPUT_FOLDER = 'MonTransl/sampleProject/gt_input'
+OUTPUT_FOLDER = 'MonTransl/sampleProject/transl_cache'
 
 # LM Studio 로컬 서버 주소 및 포트 (기본값: 1234)
 LOCAL_API_BASE = "http://localhost:1234/v1"

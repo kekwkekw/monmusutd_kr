@@ -64,58 +64,53 @@ class Updater:
     def update_novels(self):
         """시나리오 에셋 다운로드 및 텍스트 추출"""
         if not self.ablist:
+            print("  [Error] 에셋 리스트가 없습니다.")
             return
 
         base_ver = self.ablist["baseVersion"]
         base_url = f"{self.ASSET_BASE_URL}/ver_{base_ver}/webgl_r18"
         
-        # 결과물을 저장할 폴더 생성
         novels_dir = self.translation_dir / 'novels'
         novels_dir.mkdir(parents=True, exist_ok=True)
         existed_novels = os.listdir(novels_dir)
 
-        print("  > 시나리오 파일 확인 및 다운로드 중...")
+        print(f"  > 총 {len(self.ablist['data'])}개의 에셋 스캔 중...")
         
+        count = 0
         for asset in self.ablist["data"]:
             asset_path = asset["path"]
             
-            # Utage 시나리오 파일 식별 (경로에 scenario 또는 adv 포함 여부)
-            if "scenario" in asset_path.lower():
-                # 파일명에서 숫자 ID 추출
+            # 필터링 조건: 몬무스에 맞게 scenario, adv, event 등을 포함
+            is_scenario = any(k in asset_path.lower() for k in ["scenario", "adv", "event"])
+            
+            if is_scenario:
+                # 파일명에서 ID 추출
                 match = re.search(r'\d+', Path(asset_path).stem)
                 novel_id = match.group() if match else Path(asset_path).stem
                 
-                # 이미 번역 폴더가 존재하면 스킵
+                # 중복 체크
                 if novel_id in existed_novels:
                     continue
 
-                print(f"    - Downloading: {asset_path}")
+                print(f"    [Found] 다운로드 시작: {asset_path}") # 실제 다운로드 시 출력
                 file_url = f"{base_url}/{asset['hash']}{asset_path}"
                 
                 try:
                     resp = self.client.get(file_url)
                     resp.raise_for_status()
                     
-                    # 1. 몬무스 전용 XOR 복호화 적용
                     decrypted_data = decrypt_monmusu(resp.content)
-                    
-                    # 2. 유니티 에셋 파싱 (UnityPy 활용)
-                    # parse_bundle은 유니티 파일 내 TextAsset을 추출함
                     result = parse_bundle(decrypted_data)
-                    if not result:
-                        continue
-                        
-                    script_name, script_text = result
                     
-                    # 3. 텍스트 스크립트에서 대사 메시지 추출
-                    # 주의: Utage 스크립트 형식에 맞춰 parse_script 수정이 필요할 수 있음
-                    script_messages = parse_script(script_text)
-
-                    # 4. MonTransl/sampleProject/gt_input 폴더에 JSON 저장
-                    write_json(self.download_dir / f'{script_name}.json', script_messages)
-                    
+                    if result:
+                        script_name, script_text = result
+                        script_messages = parse_script(script_text)
+                        write_json(self.download_dir / f'{script_name}.json', script_messages)
+                        count += 1
                 except Exception as e:
-                    print(f"    [Warning] {asset_path} 처리 실패: {e}")
+                    print(f"    [Warning] {asset_path} 처리 오류: {e}")
+        
+        print(f"  > 총 {count}개의 시나리오 파일이 gt_input에 저장되었습니다."))
 
 if __name__ == '__main__':
     # 독립 실행 시 기본 경로 설정

@@ -54,62 +54,42 @@ class Updater:
         return target_map
 
     def update_novels(self):
-        """해시 파일의 내용물을 직접 열어 scenario_name을 역추적"""
-        target_scenarios = self.get_target_scenarios()
-        print(f"  > 추적 대상 시나리오: {len(target_scenarios)}개")
+        """데이터의 실체를 파악하기 위한 샘플 덤프 로직"""
+        if not self.ablist: return
 
         base_ver = self.ablist["baseVersion"]
         base_url = f"{self.ASSET_BASE_URL}/ver_{base_ver}/webgl_r18"
         
-        novels_dir = self.translation_dir / 'novels'
-        novels_dir.mkdir(parents=True, exist_ok=True)
-        existed_ids = os.listdir(novels_dir)
+        dump_dir = Path("debug_dump")
+        dump_dir.mkdir(parents=True, exist_ok=True)
 
-        count = 0
-        total_assets = self.ablist["data"]
+        print(f"=== [탐지] 데이터 실체 파악을 위한 샘플 덤프 시작 ===")
         
-        # 속도 향상을 위해 타겟 이름을 셋(set)으로 변환
-        target_names = set(target_scenarios.keys())
-
-        for idx, asset in enumerate(total_assets):
-            # 시나리오 파일은 보통 5KB ~ 500KB 사이
+        count = 0
+        for asset in self.ablist["data"]:
             file_size = int(asset.get('size', 0))
-            if not (1000 < file_size < 1000000): continue
-
-            if idx % 1000 == 0:
-                print(f"    [분석 중] {idx}/{len(total_assets)}... (찾은 시나리오: {count})")
-
-            file_url = f"{base_url}/{asset['hash']}{asset['path']}"
-            
-            try:
-                resp = self.client.get(file_url)
-                decrypted = decrypt_monmusu(resp.content)
+            # 시나리오 파일일 확률이 높은 10KB ~ 100KB 사이만 타겟팅
+            if 10000 < file_size < 100000:
+                file_url = f"{base_url}/{asset['hash']}{asset['path']}"
                 
-                # 텍스트로 디코딩 (Utage는 보통 UTF-8 사용)
-                content_sample = decrypted.decode('utf-8', errors='ignore')
-                
-                # 핵심: 복호화된 내용물 안에 타겟 시나리오 이름이 있는지 확인
-                # Utage 파일은 상단에 자신의 scenario_name을 기록하는 경우가 많음
-                matched_name = None
-                
-                # Utage 특유의 헤더(#Tag, Command)가 있는지 먼저 확인하여 속도 최적화
-                if "#Tag" in content_sample or "Command" in content_sample:
-                    for name in target_names:
-                        if name in content_sample:
-                            matched_name = name
-                            break
-                
-                if matched_name:
-                    if matched_name in existed_ids: continue
+                try:
+                    resp = self.client.get(file_url)
+                    # 우리가 알고 있는 몬무스 키로 복호화 수행
+                    decrypted = decrypt_monmusu(resp.content)
                     
-                    # 찾은 경우 parse_script로 대사 추출
-                    script_messages = parse_script(content_sample)
-                    if script_messages:
-                        write_json(self.download_dir / f'{matched_name}.json', script_messages)
-                        count += 1
-                        print(f"      [매칭 성공!] {matched_name} -> {target_scenarios[matched_name]}")
-            except:
-                continue
+                    # 확장자를 .bin으로 저장하여 원본 상태 보존
+                    dump_path = dump_dir / f"{asset['path']}.bin"
+                    with open(dump_path, "wb") as f:
+                        f.write(decrypted)
+                    
+                    count += 1
+                    print(f"    [Dumped] {asset['path']} (Size: {file_size} bytes)")
+                    
+                    if count >= 20: break # 샘플 20개만 확보
+                except:
+                    continue
+
+        print(f"=== 덤프 완료: 'debug_dump' 폴더를 확인해 주세요 ===")
 
 if __name__ == '__main__':
     Updater(
